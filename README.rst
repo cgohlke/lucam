@@ -1,7 +1,7 @@
-Lumenera(r) USB Camera Interface
-================================
+Teledyne Lumenera(r) USB Camera Interface
+=========================================
 
-Lucam is a Python library that provides two interfaces to the Lumenera(r)
+Lucam is a Python library that provides two interfaces to the Teledyne Lumenera(r)
 LuCam API:
 
 * **API**, a low level ctypes interface to the lucamapi.dll version 5,
@@ -19,19 +19,20 @@ LuCam API:
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2020.1.2
 
 Requirements
 ------------
 * `CPython >= 3.6 <https://www.python.org>`_
 * `Numpy 1.14 <https://www.numpy.org>`_
-* `Lumenera USB camera and drivers 5.0 <https://www.lumenera.com/>`_
+* `Lumenera USB camera and drivers 5.0 <https://www.lumenera.com/lucam-software.html/>`_
 
 Revisions
 ---------
 2020.1.1
     Remove support for Python 2.7 and 3.5.
     Update copyright.
+2020.1.2
 
 Notes
 -----
@@ -49,8 +50,8 @@ the LuCam API follows the LuCam API conventions, else PEP8 is followed.
 
 References
 ----------
-1. `Lumenera Corporation <https://www.lumenera.com/>`_
-2. Lumenera USB Camera API Reference Manual Release 5.0. Lumenera Corporation.
+1. `Teledyne Lumenera Corporation <https://www.lumenera.com/>`_
+2. `Lumenera USB Camera API Reference Manual Release 5.0. Lumenera Corporation. <https://www.lumenera.com/lucam-software.html>`_
 
 Examples
 --------
