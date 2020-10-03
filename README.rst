@@ -36,17 +36,17 @@ Revisions
 
 Notes
 -----
-"Lumenera" is a registered trademark of Lumenera Corporation (1).
+"Lumenera" is a registered trademark of Teledyne Lumenera (1).
 
 Lucam is no longer being actively developed.
 
-Lucam has been tested with the Lu165M monochrome camera on Windows only.
+Lucam has been tested with the Lu165M, L075M, LT545RM, Lt-M2420 and Lt-M2450 all of which are monochrome camera, Windows
+is the only OS that this library has been tested on.
 
-Some LuCam API functions are not available in the Lucam wrapper due to
-lack of documentation or hardware for testing.
+Some LuCam API functions are not available in the Lucam wrapper due to lack of documentation or hardware for testing.
 
-Naming of functions, methods, and constants that have an equivalent in
-the LuCam API follows the LuCam API conventions, else PEP8 is followed.
+Naming of functions, methods, and constants that have an equivalent in the LuCam API follows the LuCam API conventions,
+else PEP8 is followed.
 
 References
 ----------
