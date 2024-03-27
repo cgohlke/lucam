@@ -437,6 +437,14 @@ def API():
     )
     LucamConvertBmp24ToRgb24 = (None, pUCHAR_RGB, ULONG, ULONG)
     LucamConvertRawAVIToStdVideo = (BOOL, HANDLE, LPCWSTR, LPCWSTR, ULONG)
+    LucamConvertFrameToRgb24Ex = (
+        BOOL,
+        HANDLE,
+        pBYTE,
+        pBYTE,
+        pLUCAM_IMAGE_FORMAT,
+        pLUCAM_CONVERSION_PARAMS
+    )
     LucamPreviewAVIOpen = (HANDLE, LPCWSTR)
     LucamPreviewAVIClose = (BOOL, HANDLE)
     LucamPreviewAVIControl = (BOOL, HANDLE, ULONG, HWND)
@@ -584,6 +592,8 @@ def API():
     LucamSetTimeout = (BOOL, HANDLE, BOOL, FLOAT)
     LucamGetLastError = (ULONG,)
     LucamGetLastErrorForCamera = (ULONG, HANDLE)
+    LucamGetVideoImageFormat = (BOOL, HANDLE, pLUCAM_IMAGE_FORMAT)
+    LucamGetStillImageFormat = (BOOL, HANDLE, pLUCAM_IMAGE_FORMAT)
 
     # Pixel format IDs
     LUCAM_PF_8 = 0  # 8 bit raw or monochrome data
@@ -982,6 +992,27 @@ class Lucam:
             CorrectionMatrix=API.LUCAM_CM_NONE,
         )
 
+    def default_conversion_params(self):
+        """Return default Conversion settings for ConvertFrameToRgb24()."""
+
+        gains = API.LUCAM_CONVERSION_PARAMS.GAINS(_rgb=API.LUCAM_CONVERSION_PARAMS.GAINS.RGB(
+                1,
+                1,
+                1
+        ))
+
+        return API.LUCAM_CONVERSION_PARAMS(
+            Size=ctypes.sizeof(API.LUCAM_CONVERSION_PARAMS),
+            DemosaicMethod=API.LUCAM_DM_HIGH_QUALITY,
+            CorrectionMatrix=API.LUCAM_CM_NONE,
+            FlipX=False,
+            FlipY=False,
+            Hue=1,
+            Saturation=1,
+            UseColorGainsOverWb=True,
+            _gains=gains,
+        )
+
     def is_little_endian(self):
         """Return Endianess of camera."""
         value, flags = self.GetProperty(API.LUCAM_PROP_COLOR_FORMAT)
@@ -1066,15 +1097,15 @@ class Lucam:
             raise LucamError(self)
 
     def CreateDisplayWindow(
-        self,
-        title=b'',
-        style=282001408,
-        x=0,
-        y=0,
-        width=0,
-        height=0,
-        parent=0,
-        menu=0,
+            self,
+            title=b'',
+            style=282001408,
+            x=0,
+            y=0,
+            width=0,
+            height=0,
+            parent=0,
+            menu=0,
     ):
         """Create window, managed by API, for displaying video.
 
@@ -1094,7 +1125,7 @@ class Lucam:
 
         """
         if not API.LucamCreateDisplayWindow(
-            self._handle, title, style, x, y, width, height, parent, menu
+                self._handle, title, style, x, y, width, height, parent, menu
         ):
             raise LucamError(self)
         self._displaying_window = True
@@ -1121,7 +1152,7 @@ class Lucam:
 
         """
         if not API.LucamAdjustDisplayWindow(
-            self._handle, title, x, y, width, height
+                self._handle, title, x, y, width, height
         ):
             raise LucamError(self)
         self._displaying_window = True
@@ -1142,8 +1173,21 @@ class Lucam:
         to either color or greyscale using the ConvertFrame***() functions.
 
         """
+        raise NotImplementedError()
+
+    def GetStillImageFormat(self):
+        """Return video image format used to capture video frame.
+
+        Return type is API.LUCAM_IMAGE_FORMAT.
+
+        The video image format is needed to convert a raw Bayer frame
+        to either color or greyscale using the ConvertFrame***() functions.
+
+        """
         result = API.LUCAM_IMAGE_FORMAT()
-        if not API.LucamGetVideoImageFormat(self._handle, result):
+        result.Size = ctypes.sizeof(API.LUCAM_IMAGE_FORMAT)
+
+        if not API.LucamGetStillImageFormat(self._handle, result):
             raise LucamError(self)
         return result
 
@@ -1210,7 +1254,7 @@ class Lucam:
         flags = API.LONG()
         prop = Lucam.PROPERTY.get(prop, prop)
         if not API.LucamPropertyRange(
-            self._handle, prop, mn, mx, default, flags
+                self._handle, prop, mn, mx, default, flags
         ):
             raise LucamError(self)
         return mn.value, mx.value, default.value, flags.value
@@ -1482,7 +1526,7 @@ class Lucam:
 
         """
         pdata = data.ctypes.data_as(API.pBYTE)
-        height, width = data.shape[-2:]
+        height, width = data.shape[:2]
         pixelformat = {
             (2, 1): API.LUCAM_PF_8,
             (3, 1): API.LUCAM_PF_24,
@@ -1491,7 +1535,7 @@ class Lucam:
             (3, 2): API.LUCAM_PF_48,
         }[(data.ndim, data.dtype.itemsize)]
         if not API.LucamSaveImageWEx(
-            self._handle, width, height, pixelformat, pdata, filename
+                self._handle, width, height, pixelformat, pdata, filename
         ):
             raise LucamError(self)
 
@@ -1513,9 +1557,9 @@ class Lucam:
         """
         ctrltype = Lucam.VIDEO_CONTROL.get(ctrltype, ctrltype)
         if ctrltype in (
-            API.START_STREAMING,
-            API.START_DISPLAY,
-            API.START_RGBSTREAM,
+                API.START_STREAMING,
+                API.START_DISPLAY,
+                API.START_RGBSTREAM,
         ):
             self._streaming = self.GetFormat()[0]
         else:
@@ -1596,7 +1640,7 @@ class Lucam:
         """
         ctrltype = Lucam.VIDEO_CONTROL.get(ctrltype, ctrltype)
         if not API.LucamStreamVideoControlAVI(
-            self._handle, ctrltype, filename, window
+                self._handle, ctrltype, filename, window
         ):
             raise LucamError(self)
 
@@ -1615,15 +1659,36 @@ class Lucam:
         """
         outtype = Lucam.AVI_TYPE.get(outtype, outtype)
         if not API.LucamConvertRawAVIToStdVideo(
-            self._handle, outfile, inputfile, outtype
+                self._handle, outfile, inputfile, outtype
         ):
             raise LucamError(self)
 
-    def ConvertFrameToRgb24(self):
+    def ConvertFrameToRgb24(self, data, snapshot=None, conversion=None):
         """Return RGB24 image from raw Bayer data."""
         raise NotImplementedError()
 
-    def ConvertFrameToRgb32(self):
+    def ConvertFrameToRGB24Ex(self, data, image_format, conversion=None):
+        """Return RGB24 image from raw Bayer data."""
+
+        if conversion is None:
+            conversion = self.default_conversion_params()
+
+        # out = (API.BYTE * (image_format.ImageSize * 3))()
+        format = self.GetFormat()[0]
+        format.pixelFormat = API.LUCAM_PF_24
+        out, pout = ndarray(format, self._byteorder)
+
+        if not API.LucamConvertFrameToRgb24Ex(
+            self._handle,
+            pout,
+            data.ctypes.data_as(API.pBYTE),
+            image_format,
+            conversion
+        ):
+            raise LucamError(self)
+        return out
+
+    def ConvertFrameToRgb32(self, data, snapshot=None, conversion=None):
         """Return RGB32 image from raw Bayer data."""
         raise NotImplementedError()
 
@@ -1652,7 +1717,7 @@ class Lucam:
             raise LucamError(self)
 
     def Setup8bitsColorLUT(
-        self, lut, red=False, green1=False, green2=False, blue=False
+            self, lut, red=False, green1=False, green2=False, blue=False
     ):
         """Populate 8 bit Color LUT inside camera.
 
@@ -1667,7 +1732,7 @@ class Lucam:
         """
         lut = numpy.array(lut if lut else [], numpy.uint8)
         if not API.LucamSetup8bitsColorLUT(
-            self._handle, lut, lut.size, red, green1, green2, blue
+                self._handle, lut, lut.size, red, green1, green2, blue
         ):
             raise LucamError(self)
 
@@ -1834,7 +1899,7 @@ class Lucam:
 
         """
         if not API.LucamOneShotAutoExposure(
-            self._handle, target, startx, starty, width, height
+                self._handle, target, startx, starty, width, height
         ):
             raise LucamError(self)
 
@@ -1851,12 +1916,12 @@ class Lucam:
 
         """
         if not API.LucamOneShotAutoWhiteBalance(
-            self._handle, startx, starty, width, height
+                self._handle, startx, starty, width, height
         ):
             raise LucamError(self)
 
     def OneShotAutoWhiteBalanceEx(
-        self, redovergreen, blueovergreen, startx, starty, width, height
+            self, redovergreen, blueovergreen, startx, starty, width, height
     ):
         """Perform one iteration of exposure adjustment to reach target color.
 
@@ -1873,13 +1938,13 @@ class Lucam:
 
         """
         if not API.LucamOneShotAutoWhiteBalanceEx(
-            self._handle,
-            redovergreen,
-            blueovergreen,
-            startx,
-            starty,
-            width,
-            height,
+                self._handle,
+                redovergreen,
+                blueovergreen,
+                startx,
+                starty,
+                width,
+                height,
         ):
             raise LucamError(self)
 
@@ -1896,12 +1961,12 @@ class Lucam:
 
         """
         if not API.LucamDigitalWhiteBalance(
-            self._handle, startx, starty, width, height
+                self._handle, startx, starty, width, height
         ):
             raise LucamError(self)
 
     def LucamDigitalWhiteBalanceEx(
-        self, redovergreen, blueovergreen, startx, starty, width, height
+            self, redovergreen, blueovergreen, startx, starty, width, height
     ):
         """Perform one iteration of digital color gain adjustment.
 
@@ -1918,26 +1983,26 @@ class Lucam:
 
         """
         if not API.LucamDigitalWhiteBalanceEx(
-            self._handle,
+                self._handle,
+                redovergreen,
+                blueovergreen,
+                startx,
+                starty,
+                width,
+                height,
+        ):
+            raise LucamError(self)
+
+    def AdjustWhiteBalanceFromSnapshot(
+            self,
+            snapshot,
+            data,
             redovergreen,
             blueovergreen,
             startx,
             starty,
             width,
             height,
-        ):
-            raise LucamError(self)
-
-    def AdjustWhiteBalanceFromSnapshot(
-        self,
-        snapshot,
-        data,
-        redovergreen,
-        blueovergreen,
-        startx,
-        starty,
-        width,
-        height,
     ):
         """Adjust digital color gain values of previously taken snapshot.
 
@@ -1960,15 +2025,15 @@ class Lucam:
         """
         pdata = data.ctypes.data_as(API.pBYTE)
         if not API.LucamAdjustWhiteBalanceFromSnapshot(
-            self._handle,
-            snapshot,
-            pdata,
-            redovergreen,
-            blueovergreen,
-            startx,
-            starty,
-            width,
-            height,
+                self._handle,
+                snapshot,
+                pdata,
+                redovergreen,
+                blueovergreen,
+                startx,
+                starty,
+                width,
+                height,
         ):
             raise LucamError(self)
 
@@ -1984,16 +2049,16 @@ class Lucam:
 
         """
         if not API.LucamOneShotAutoIris(
-            self._handle, target, startx, starty, width, height
+                self._handle, target, startx, starty, width, height
         ):
             raise LucamError(self)
 
     def ContinuousAutoExposureEnable(
-        self, target, startx, starty, width, height, lightingperiod
+            self, target, startx, starty, width, height, lightingperiod
     ):
         """Undocumented function."""
         if not API.LucamContinuousAutoExposureEnable(
-            self._handle, target, startx, starty, width, height, lightingperiod
+                self._handle, target, startx, starty, width, height, lightingperiod
         ):
             raise LucamError(self)
 
@@ -2003,7 +2068,7 @@ class Lucam:
             raise LucamError(self)
 
     def LucamAutoFocusStart(
-        self, startx, starty, width, height, callback=None, context=None
+            self, startx, starty, width, height, callback=None, context=None
     ):
         """Start auto focus calibration.
 
@@ -2023,16 +2088,16 @@ class Lucam:
         if context is not None:
             context = ctypes.py_object(context)
         if not API.LucamAutoFocusStart(
-            self._handle,
-            startx,
-            starty,
-            width,
-            height,
-            0.0,
-            0.0,
-            0.0,
-            callback,
-            context,
+                self._handle,
+                startx,
+                starty,
+                width,
+                height,
+                0.0,
+                0.0,
+                0.0,
+                callback,
+                context,
         ):
             raise LucamError(self)
         self._callbacks[API.ProgressCallback] = callback
@@ -2103,7 +2168,7 @@ class Lucam:
         size = data.size
         assert 0 <= (size - offset) <= 2048
         if not API.LucamPermanentBufferWrite(
-            self._handle, pdata, offset, size
+                self._handle, pdata, offset, size
         ):
             raise LucamError(self)
 
@@ -2602,7 +2667,7 @@ class LucamPreviewAVI:
         millisecs = API.LONGLONG()
         microsecs = API.LONGLONG()
         if not API.LucamPreviewAVIGetDuration(
-            self._handle, minutes, seconds, millisecs, microsecs
+                self._handle, minutes, seconds, millisecs, microsecs
         ):
             raise LucamError()
         return minutes.value, seconds.value, millisecs.value, microsecs.value
@@ -2628,7 +2693,7 @@ class LucamPreviewAVI:
         millisecs = API.LONGLONG()
         microsecs = API.LONGLONG()
         if not API.LucamPreviewAVIGetPositionTime(
-            self._handle, minutes, seconds, millisecs, microsecs
+                self._handle, minutes, seconds, millisecs, microsecs
         ):
             raise LucamError()
         return minutes.value, seconds.value, millisecs.value, microsecs.value
@@ -2643,7 +2708,7 @@ class LucamPreviewAVI:
     def SetPositionTime(self, minutes, seconds, millisecs, microsecs):
         """Set current time based position within AVI file."""
         if not API.LucamPreviewAVISetPositionTime(
-            self._handle, minutes, seconds, millisecs, microsecs
+                self._handle, minutes, seconds, millisecs, microsecs
         ):
             raise LucamError()
 
@@ -2659,7 +2724,7 @@ class LucamPreviewAVI:
         filetype = API.LONG()
         bitdepth = API.LONG()
         if not API.LucamPreviewAVIGetFormat(
-            self._handle, width, height, filetype, bitdepth
+                self._handle, width, height, filetype, bitdepth
         ):
             raise LucamError()
         return width.value, height.value, filetype.value, bitdepth.value
@@ -2739,8 +2804,8 @@ def ndarray(frameformat, byteorder='=', out=None, validate=True, numframes=1):
         return out, out.ctypes.data_as(API.pBYTE)
 
     if (
-        frameformat.width % frameformat.binningX
-        or frameformat.height % frameformat.binningY
+            frameformat.width % frameformat.binningX
+            or frameformat.height % frameformat.binningY
     ):
         raise ValueError('invalid frame format')
 
@@ -2758,9 +2823,9 @@ def ndarray(frameformat, byteorder='=', out=None, validate=True, numframes=1):
     if pformat in (0, 1, 3, 4, 5):
         shape = (height, width)
     elif pformat in (2, 7):
-        shape = (3, height, width)
+        shape = (height, width, 3)
     elif pformat == 6:
-        shape = (4, height, width)
+        shape = (height, width, 4)
     else:
         raise ValueError('invalid pixel format')
 
@@ -3085,5 +3150,16 @@ def test():
     print('Done')
 
 
+def test_chromatic():
+    """Demonstrate use of Lucam object and functions (multichromatic only)."""
+    camera = Lucam()
+    image_format = camera.GetStillImageFormat()
+    image = camera.TakeSnapshot()
+    converted_image = camera.ConvertFrameToRGB24Ex(image, image_format)
+    camera.SaveImage(converted_image, "test_color.tif")
+    camera.CameraClose()
+
+
 if __name__ == '__main__':
     test()
+    test_chromatic()
